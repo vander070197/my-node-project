@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WebFTP — Browser FTP Client</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root{
+    --accent:#2f7de1;
+    --accent-dim:#1f5fb8;
+    --good:#3fae5c;
+    --warn:#d99a1f;
+    --bad:#d6473c;
+    --radius:3px;
+    --mono:"Consolas","SF Mono","Cascadia Code",Menlo,monospace;
+    --ui:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;
+  }
+  html[data-theme="dark"]{
+    --bg-0:#1b1d22;
+    --bg-1:#22252b;
+    --bg-2:#2a2d34;
+    --bg-3:#34383f;
+    --border:#3c3f46;
+    --text-0:#e6e7ea;
+    --text-1:#a8acb4;
+    --text-dim:#6c707a;
+    --row-alt:#202329;
+    --row-hover:#2d3138;
+    --row-sel:#2a4666;
+    --shadow:0 4px 14px rgba(0,0,0,.35);
+  }
+  html[data-theme="light"]{
+    --bg-0:#f3f4f6;
+    --bg-1:#ffffff;
+    --bg-2:#eceef1;
+    --bg-3:#e2e5e9;
+    --border:#d3d7dd;
+    --text-0:#1d2025;
+    --text-1:#52565e;
+    --text-dim:#8a8f99;
+    --row-alt:#f7f8fa;
+    --row-hover:#e8f0fc;
+    --row-sel:#cfe2fb;
+    --shadow:0 4px 14px rgba(20,20,30,.1);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:var(--ui);background:var(--bg-0);color:var(--text-0);
+    height:100vh;overflow:hidden;font-size:13px;}
+  ::selection{background:var(--accent);color:#fff;}
+
+  /* ===== top bars ===== */
+  .titlebar{display:flex;align-items:center;gap:10px;background:var(--bg-2);
+    border-bottom:1px solid var(--border);padding:6px 10px;height:34px;}
+  .titlebar .logo{font-weight:700;letter-spacing:.5px;font-size:13px;display:flex;align-items:center;gap:6px;}
+  .logo .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px rgba(47,125,225,.18);}
+  .titlebar .spacer{flex:1;}
+  .iconbtn{width:26px;height:26px;border-radius:var(--radius);border:1px solid transparent;
+    background:transparent;color:var(--text-1);display:flex;align-items:center;justify-content:center;
+    cursor:pointer;}
+  .iconbtn:hover{background:var(--bg-3);border-color:var(--border);color:var(--text-0);}
+  .iconbtn svg{width:15px;height:15px;}
+
+  .connectbar{display:flex;align-items:center;gap:6px;background:var(--bg-1);
+    border-bottom:1px solid var(--border);padding:7px 10px;flex-wrap:wrap;}
+  .connectbar .field{display:flex;align-items:center;gap:5px;}
+  .connectbar label{font-size:11px;color:var(--text-1);}
+  .connectbar input{background:var(--bg-2);border:1px solid var(--border);color:var(--text-0);
+    border-radius:var(--radius);padding:5px 7px;font-size:12px;outline:none;width:140px;}
+  .connectbar input#fld-port{width:60px;}
+  .connectbar input:focus{border-color:var(--accent);}
+  .btn{background:var(--bg-3);border:1px solid var(--border);color:var(--text-0);
+    border-radius:var(--radius);padding:6px 14px;font-size:12px;cursor:pointer;}
+  .btn:hover{border-color:var(--accent);}
+  .btn.primary{background:var(--accent);border-color:var(--accent-dim);color:#fff;}
+  .btn.primary:hover{background:var(--accent-dim);}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .quickbar{display:flex;gap:4px;}
+
+  /* ===== toolbar ===== */
+  .toolbar{display:flex;align-items:center;gap:4px;background:var(--bg-1);
+    border-bottom:1px solid var(--border);padding:4px 8px;}
+  .toolbar .sep{width:1px;height:18px;background:var(--border);margin:0 5px;}
+  .toolbar .pathbox{flex:1;display:flex;align-items:center;gap:6px;background:var(--bg-2);
+    border:1px solid var(--border);border-radius:var(--radius);padding:5px 8px;
+    font-family:var(--mono);font-size:12px;color:var(--text-1);min-width:120px;}
+  .toolbar .pathbox span.cur{color:var(--text-0);}
+
+  /* ===== layout ===== */
+  .body-wrap{display:flex;flex-direction:column;height:calc(100vh - 34px - 49px - 33px);}
+  .panes{display:flex;flex:1;min-height:0;}
+  .pane{flex:1;display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border);}
+  .pane:last-child{border-right:none;}
+  .pane-head{padding:7px 10px;background:var(--bg-1);border-bottom:1px solid var(--border);
+    font-size:11px;font-weight:600;color:var(--text-1);text-transform:uppercase;letter-spacing:.6px;
+    display:flex;justify-content:space-between;}
+  .pane-head .tag{font-weight:400;text-transform:none;color:var(--text-dim);font-family:var(--mono);}
+
+  table.filelist{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .filelist-wrap{flex:1;overflow:auto;background:var(--bg-1);}
+  table.filelist thead th{position:sticky;top:0;background:var(--bg-2);text-align:left;
+    padding:6px 10px;border-bottom:1px solid var(--border);color:var(--text-1);font-weight:600;
+    font-size:11px;text-transform:uppercase;letter-spacing:.4px;cursor:pointer;user-select:none;}
+  table.filelist thead th:hover{color:var(--text-0);}
+  table.filelist tbody tr{cursor:default;}
+  table.filelist tbody tr:nth-child(even){background:var(--row-alt);}
+  table.filelist tbody tr:hover{background:var(--row-hover);}
+  table.filelist tbody tr.selected{background:var(--row-sel);}
+  table.filelist td{padding:5px 10px;white-space:nowrap;border-bottom:1px solid transparent;}
+  td.fname{display:flex;align-items:center;gap:7px;font-family:var(--ui);}
+  td.fsize,td.fperm{font-family:var(--mono);color:var(--text-1);font-size:11.5px;}
+  td.fdate{color:var(--text-1);font-size:11.5px;}
+  .ftype-icon{width:14px;height:14px;flex:none;}
+  .ftype-folder{color:#e3b341;}
+  .ftype-file{color:var(--text-dim);}
+  html[data-theme="light"] .ftype-folder{color:#c9911a;}
+
+  /* ===== resizer + queue ===== */
+  .resizer{height:5px;cursor:row-resize;background:var(--bg-1);border-top:1px solid var(--border);
+    border-bottom:1px solid var(--border);position:relative;}
+  .resizer::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:34px;height:2px;background:var(--border);border-radius:2px;}
+  .queue{background:var(--bg-1);display:flex;flex-direction:column;flex-shrink:0;height:170px;}
+  .queue-head{display:flex;align-items:center;padding:6px 10px;border-bottom:1px solid var(--border);
+    font-size:11px;font-weight:600;color:var(--text-1);text-transform:uppercase;letter-spacing:.6px;gap:14px;}
+  .queue-head .tabs{display:flex;gap:2px;}
+  .qtab{padding:4px 10px;border-radius:var(--radius);cursor:pointer;color:var(--text-1);}
+  .qtab.active{background:var(--bg-3);color:var(--text-0);}
+  .queue-list{flex:1;overflow:auto;font-size:12px;}
+  .qrow{display:grid;grid-template-columns:22px 1fr 90px 160px 90px;gap:8px;align-items:center;
+    padding:5px 10px;border-bottom:1px solid var(--bg-2);}
+  .qrow .qicon{color:var(--text-1);}
+  .qrow .qname{font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;}
+  .qrow .qsize{color:var(--text-1);font-family:var(--mono);font-size:11px;}
+  .qrow .qbar{height:6px;border-radius:4px;background:var(--bg-3);overflow:hidden;}
+  .qrow .qbar i{display:block;height:100%;background:var(--accent);}
+  .qrow .qstatus{font-size:11px;}
+  .qstatus.ok{color:var(--good);}
+  .qstatus.err{color:var(--bad);}
+  .qstatus.busy{color:var(--accent);}
+  .qstatus.queued{color:var(--text-dim);}
+  .qempty{padding:24px;text-align:center;color:var(--text-dim);font-size:12px;}
+
+  /* ===== statusbar / log ===== */
+  .statusbar{height:33px;display:flex;align-items:center;gap:10px;padding:0 10px;
+    background:var(--bg-2);border-top:1px solid var(--border);font-size:11.5px;color:var(--text-1);font-family:var(--mono);}
+  .statusbar .dotstate{width:8px;height:8px;border-radius:50%;background:var(--text-dim);}
+  .statusbar .dotstate.on{background:var(--good);box-shadow:0 0 0 3px rgba(63,174,92,.18);}
+  .statusbar .dotstate.busy{background:var(--warn);box-shadow:0 0 0 3px rgba(217,154,31,.18);}
+  .statusbar .right{margin-left:auto;display:flex;gap:14px;}
+
+  /* scrollbars */
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--bg-3);border-radius:6px;border:2px solid var(--bg-1);}
+  ::-webkit-scrollbar-thumb:hover{background:var(--text-dim);}
+
+  /* context menu */
+  .ctxmenu{position:fixed;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:4px;min-width:160px;z-index:999;display:none;font-size:12px;}
+  .ctxmenu .item{padding:7px 10px;border-radius:var(--radius);cursor:pointer;color:var(--text-0);}
+  .ctxmenu .item:hover{background:var(--accent);color:#fff;}
+  .ctxmenu .sep{height:1px;background:var(--border);margin:4px 2px;}
+
+  .toast{position:fixed;bottom:16px;right:16px;background:var(--bg-2);border:1px solid var(--border);
+    border-left:3px solid var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:12.5px;
+    box-shadow:var(--shadow);z-index:1000;opacity:0;transform:translateY(8px);transition:.25s;max-width:280px;}
+  .toast.show{opacity:1;transform:translateY(0);}
+
+  @media(max-width:760px){
+    .panes{flex-direction:column;}
+    .pane{border-right:none;border-bottom:1px solid var(--border);}
+    td.fdate{display:none;}
+    .qrow{grid-template-columns:18px 1fr 70px 80px;}
+    .qrow .qbar{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<!-- title bar -->
+<div class="titlebar">
+  <div class="logo"><span class="dot"></span>WebFTP</div>
+  <div class="spacer"></div>
+  <button class="iconbtn" id="btn-theme" title="Toggle theme">
+    <svg id="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+  </button>
+  <button class="iconbtn" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+</div>
+
+<!-- connection bar -->
+<div class="connectbar">
+  <div class="field"><label>Host</label><input id="fld-host" type="text" placeholder="ftp.example.com" value="ftp.example.com"></div>
+  <div class="field"><label>Username</label><input id="fld-user" type="text" placeholder="user" value="demo"></div>
+  <div class="field"><label>Password</label><input id="fld-pass" type="password" placeholder="••••••••" value="demo"></div>
+  <div class="field"><label>Port</label><input id="fld-port" type="text" placeholder="21" value="21"></div>
+  <button class="btn primary" id="btn-connect">Quickconnect</button>
+  <button class="btn" id="btn-disconnect" disabled>Disconnect</button>
+  <div class="spacer" style="flex:1"></div>
+  <div class="quickbar">
+    <button class="iconbtn" title="Refresh" id="btn-refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
+  </div>
+</div>
+
+<!-- toolbar / paths -->
+<div class="toolbar">
+  <div class="pathbox" id="local-path"><span>Local:</span><span class="cur">C:\Users\You\Downloads</span></div>
+  <button class="iconbtn" title="Sync panes" id="btn-sync"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>
+  <div class="pathbox" id="remote-path"><span>Remote:</span><span class="cur">/public_html</span></div>
+</div>
+
+<div class="body-wrap">
+  <div class="panes">
+    <!-- LOCAL PANE -->
+    <div class="pane" id="pane-local">
+      <div class="pane-head"><span>Local site</span><span class="tag" id="local-count">7 items</span></div>
+      <div class="filelist-wrap">
+        <table class="filelist">
+          <thead><tr><th style="width:50%">Filename</th><th>Size</th><th>Type</th><th>Modified</th></tr></thead>
+          <tbody id="local-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <!-- REMOTE PANE -->
+    <div class="pane" id="pane-remote">
+      <div class="pane-head"><span>Remote site</span><span class="tag" id="remote-count">— not connected</span></div>
+      <div class="filelist-wrap">
+        <table class="filelist">
+          <thead><tr><th style="width:46%">Filename</th><th>Size</th><th>Permissions</th><th>Modified</th></tr></thead>
+          <tbody id="remote-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="resizer" id="resizer"></div>
+
+  <!-- transfer queue -->
+  <div class="queue">
+    <div class="queue-head">
+      <div class="tabs">
+        <div class="qtab active" data-tab="queue">Transfer queue</div>
+        <div class="qtab" data-tab="done">Successful</div>
+        <div class="qtab" data-tab="failed">Failed</div>
+      </div>
+    </div>
+    <div class="queue-list" id="queue-list">
+      <div class="qempty">No transfers yet — drag files between panes or use the right-click menu to upload/download.</div>
+    </div>
+  </div>
+</div>
+
+<!-- status bar -->
+<div class="statusbar">
+  <span class="dotstate" id="status-dot"></span>
+  <span id="status-text">Not connected.</span>
+  <div class="right">
+    <span id="status-queue">Queue: 0</span>
+    <span id="status-speed">0 KB/s</span>
+  </div>
+</div>
+
+<div class="ctxmenu" id="ctxmenu">
+  <div class="item" data-act="download">⬇ Download</div>
+  <div class="item" data-act="upload">⬆ Upload</div>
+  <div class="sep"></div>
+  <div class="item" data-act="rename">✎ Rename</div>
+  <div class="item" data-act="delete">🗑 Delete</div>
+  <div class="sep"></div>
+  <div class="item" data-act="newfolder">＋ New folder</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script>
+// Point this at your running backend (node server.js). Default: http://localhost:4000
+const API = "http://localhost:4000/api";
+let sessionId = null;
+
+function api(method, url, body) {
+  const opts = { method, headers: {} };
+  if (sessionId) opts.headers["x-session-id"] = sessionId;
+  if (body instanceof FormData) {
+    opts.body = body;
+  } else if (body) {
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(body);
+  }
+  return fetch(API + url, opts).then(async r => {
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+    return data;
+  });
+}
+
+$(function(){
+
+  /* ---------- theme ---------- */
+  const root = document.documentElement;
+  function setTheme(t){
+    root.setAttribute('data-theme', t);
+    localStorage.removeItem('webftp-theme'); // artifacts: no persistent storage, keep in-memory only
+    $('#theme-icon').html(t === 'dark'
+      ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'
+      : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>');
+  }
+  let curTheme = 'dark';
+  setTheme(curTheme);
+  $('#btn-theme').on('click', function(){
+    curTheme = curTheme === 'dark' ? 'light' : 'dark';
+    setTheme(curTheme);
+  });
+
+  const folderIcon = '<svg class="ftype-icon ftype-folder" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z"/></svg>';
+  const fileIcon   = '<svg class="ftype-icon ftype-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>';
+
+  function fmtSize(bytes){
+    if(!bytes && bytes!==0) return '';
+    if(bytes < 1024) return bytes+' B';
+    if(bytes < 1048576) return (bytes/1024).toFixed(1)+' KB';
+    return (bytes/1048576).toFixed(1)+' MB';
+  }
+
+  function log(msg){ $('#status-text').text(msg); }
+  function toast(msg){
+    const $t = $('#toast').text(msg);
+    $t.addClass('show');
+    clearTimeout(window._toastT);
+    window._toastT = setTimeout(()=>$t.removeClass('show'), 2600);
+  }
+
+  // Browsers cannot list an arbitrary local folder for security reasons —
+  // a real local "pane" is populated only from files the user explicitly
+  // picks (via the hidden file input below or drag-and-drop from the OS).
+  let localFiles = []; // {name, size, file (File object)}
+  const $localInput = $('<input type="file" multiple style="display:none">').appendTo('body');
+  $('#pane-local .pane-head').append(
+    '<button class="btn" id="btn-pick-local" style="padding:3px 9px;font-size:11px;">+ Add files…</button>'
+  );
+  $('#btn-pick-local').on('click', () => $localInput.click());
+  $localInput.on('change', function(){
+    Array.from(this.files).forEach(f => localFiles.push({name:f.name, size:f.size, file:f}));
+    renderLocal();
+    this.value = '';
+  });
+  // OS drag-and-drop onto the local pane also adds real files
+  $('#pane-local').on('dragover', e => e.preventDefault());
+  $('#pane-local').on('drop', function(e){
+    e.preventDefault();
+    const dt = e.originalEvent.dataTransfer;
+    if(dt.files && dt.files.length){
+      Array.from(dt.files).forEach(f => localFiles.push({name:f.name, size:f.size, file:f}));
+      renderLocal();
+    }
+  });
+
+  function renderLocal(){
+    const $b = $('#local-body').empty();
+    if(!localFiles.length){
+      $b.append('<tr><td colspan="4" style="color:var(--text-dim);padding:14px 10px;">No local files added — click “+ Add files…” or drag files from your computer here.</td></tr>');
+    }
+    localFiles.forEach((f,i)=>{
+      $b.append(`<tr data-idx="${i}" data-name="${f.name}" data-dir="false">
+        <td class="fname">${fileIcon}<span>${f.name}</span></td>
+        <td class="fsize">${fmtSize(f.size)}</td>
+        <td class="fsize">File</td>
+        <td class="fdate">—</td>
+      </tr>`);
+    });
+    $('#local-count').text(localFiles.length+' items');
+  }
+  renderLocal();
+
+  function renderRemote(list, cwd){
+    const $b = $('#remote-body').empty();
+    if(!list){ $('#remote-count').text('— not connected'); return; }
+    list.forEach(f=>{
+      $b.append(`<tr data-name="${f.name}" data-dir="${f.isDir}">
+        <td class="fname">${f.isDir?folderIcon:fileIcon}<span>${f.name}</span></td>
+        <td class="fsize">${f.isDir?'':fmtSize(f.size)}</td>
+        <td class="fperm">${f.isDir?'dir':'file'}</td>
+        <td class="fdate">${f.date||''}</td>
+      </tr>`);
+    });
+    $('#remote-count').text(list.length+' items');
+    $('#remote-path .cur').text(cwd||'/');
+  }
+
+  /* ---------- row selection ---------- */
+  $(document).on('click', 'table.filelist tbody tr', function(e){
+    if(!$(this).data('name')) return;
+    const $tr = $(this), $tbody = $tr.closest('tbody');
+    if(!e.ctrlKey && !e.metaKey) $tbody.find('tr').removeClass('selected');
+    $tr.toggleClass('selected');
+  });
+  $(document).on('dblclick', '#remote-body tr', async function(){
+    if($(this).data('dir')){
+      const name = $(this).data('name');
+      try{
+        const r = await api('GET', '/list?path='+encodeURIComponent(name));
+        renderRemote(r.list, r.cwd);
+        log('Changed directory to '+r.cwd);
+      }catch(err){ toast(err.message); }
+    }
+  });
+
+  /* ---------- real connect / disconnect ---------- */
+  let connected = false;
+
+  $('#btn-connect').on('click', async function(){
+    const host = $('#fld-host').val().trim();
+    const user = $('#fld-user').val().trim();
+    const password = $('#fld-pass').val();
+    const port = $('#fld-port').val().trim();
+    if(!host){ toast('Enter a host to connect to.'); return; }
+    if(connected) return;
+
+    $('#status-dot').removeClass('on').addClass('busy');
+    log('Connecting to '+host+' …');
+    $(this).prop('disabled',true).text('Connecting…');
+
+    try{
+      const r = await api('POST', '/connect', { host, user, password, port });
+      sessionId = r.sessionId;
+      connected = true;
+      $('#status-dot').removeClass('busy').addClass('on');
+      log(r.message);
+      $('#btn-disconnect').prop('disabled',false);
+      renderRemote(r.list, r.cwd);
+      toast('Connected to '+host);
+    }catch(err){
+      $('#status-dot').removeClass('busy on');
+      log('Connection failed: '+err.message);
+      toast('Connection failed: '+err.message);
+    }finally{
+      $(this).prop('disabled',false).text('Quickconnect');
+    }
+  });
+
+  $('#btn-disconnect').on('click', async function(){
+    try{ await api('POST','/disconnect'); }catch(e){}
+    connected = false; sessionId = null;
+    $('#status-dot').removeClass('on busy');
+    log('Disconnected from server.');
+    $(this).prop('disabled',true);
+    renderRemote(null);
+  });
+
+  $('#btn-refresh').on('click', async function(){
+    if(connected){
+      try{ const r = await api('GET','/list'); renderRemote(r.list, r.cwd); log('Directory listing refreshed.'); }
+      catch(err){ toast(err.message); }
+    }
+  });
+
+  $('#fld-host,#fld-user,#fld-pass,#fld-port').on('keydown', function(e){
+    if(e.key === 'Enter') $('#btn-connect').click();
+  });
+
+  /* ---------- context menu (real actions) ---------- */
+  const $ctx = $('#ctxmenu');
+  let ctxTarget = null;
+  $(document).on('contextmenu', 'table.filelist tbody tr', function(e){
+    if(!$(this).data('name')) return;
+    e.preventDefault();
+    $(this).addClass('selected').siblings().removeClass('selected');
+    ctxTarget = { row:this, pane: $(this).closest('.pane').attr('id') };
+    const x = Math.min(e.pageX, window.innerWidth-180);
+    const y = Math.min(e.pageY, window.innerHeight-200);
+    $ctx.css({left:x, top:y}).show();
+  });
+  $(document).on('click', function(){ $ctx.hide(); });
+  $ctx.on('click', '.item', async function(){
+    const act = $(this).data('act');
+    if(!ctxTarget) return;
+    const name = $(ctxTarget.row).data('name');
+    const isDir = $(ctxTarget.row).data('dir') === true || $(ctxTarget.row).data('dir') === 'true';
+
+    if(act === 'download'){
+      if(ctxTarget.pane !== 'pane-remote'){ toast('Select a remote file to download.'); return; }
+      downloadRemote(name);
+    } else if(act === 'upload'){
+      if(ctxTarget.pane !== 'pane-local'){ toast('Select a local file to upload.'); return; }
+      const idx = $(ctxTarget.row).data('idx');
+      uploadLocal(localFiles[idx]);
+    } else if(act === 'delete'){
+      if(!connected){ toast('Connect first.'); return; }
+      try{ await api('POST','/delete', {name, isDir}); toast('Deleted “'+name+'”.'); $('#btn-refresh').click(); }
+      catch(err){ toast('Delete failed: '+err.message); }
+    } else if(act === 'rename'){
+      if(!connected){ toast('Connect first.'); return; }
+      const to = prompt('Rename “'+name+'” to:', name);
+      if(to && to !== name){
+        try{ await api('POST','/rename', {from:name, to}); toast('Renamed to “'+to+'”.'); $('#btn-refresh').click(); }
+        catch(err){ toast('Rename failed: '+err.message); }
+      }
+    } else if(act === 'newfolder'){
+      if(!connected){ toast('Connect first.'); return; }
+      const name2 = prompt('New folder name:', 'new-folder');
+      if(name2){
+        try{ await api('POST','/mkdir', {name:name2}); toast('Folder created.'); $('#btn-refresh').click(); }
+        catch(err){ toast('Create folder failed: '+err.message); }
+      }
+    }
+  });
+
+  /* ---------- real transfer queue ---------- */
+  let qCounter = 0;
+  function addQueueRow(name, dirIcon, sizeLabel){
+    $('.qempty').remove();
+    const id = 'q'+(++qCounter);
+    $('#queue-list').append(`
+      <div class="qrow" id="${id}">
+        <div class="qicon">${dirIcon}</div>
+        <div class="qname">${name}</div>
+        <div class="qsize">${sizeLabel}</div>
+        <div class="qbar"><i style="width:0%"></i></div>
+        <div class="qstatus busy">Transferring</div>
+      </div>`);
+    $('#status-queue').text('Queue: '+$('.qrow').length);
+    return id;
+  }
+  function finishQueueRow(id, ok, msg){
+    const $row = $('#'+id);
+    $row.find('i').css('width','100%');
+    $row.find('.qstatus').removeClass('busy').addClass(ok?'ok':'err').text(ok?'Complete':'Failed');
+    if(msg) toast(msg);
+  }
+
+  async function downloadRemote(name){
+    const id = addQueueRow(name, '⬇', '…');
+    try{
+      const res = await fetch(API+'/download?name='+encodeURIComponent(name), {
+        headers: sessionId ? {'x-session-id': sessionId} : {}
+      });
+      if(!res.ok){ const e = await res.json().catch(()=>({})); throw new Error(e.error||'Download failed'); }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      finishQueueRow(id, true, '“'+name+'” downloaded.');
+    }catch(err){
+      finishQueueRow(id, false, 'Download failed: '+err.message);
+    }
+  }
+
+  async function uploadLocal(entry){
+    if(!connected){ toast('Connect to a server first.'); return; }
+    if(!entry || !entry.file){ toast('No local file data to upload.'); return; }
+    const id = addQueueRow(entry.name, '⬆', fmtSize(entry.size));
+    const fd = new FormData();
+    fd.append('file', entry.file, entry.name);
+    try{
+      await api('POST','/upload', fd);
+      finishQueueRow(id, true, '“'+entry.name+'” uploaded.');
+      $('#btn-refresh').click();
+    }catch(err){
+      finishQueueRow(id, false, 'Upload failed: '+err.message);
+    }
+  }
+
+  /* ---------- pane resizer ---------- */
+  let dragging = false;
+  $('#resizer').on('mousedown', function(){ dragging = true; });
+  $(document).on('mouseup', function(){ dragging = false; });
+  $(document).on('mousemove', function(e){
+    if(!dragging) return;
+    const wrapTop = $('.body-wrap').offset().top;
+    const wrapH = $('.body-wrap').height();
+    let queueH = wrapTop + wrapH - e.pageY;
+    queueH = Math.max(80, Math.min(queueH, wrapH-120));
+    $('.queue').css('height', queueH+'px');
+  });
+
+  /* ---------- queue tabs ---------- */
+  $('.qtab').on('click', function(){
+    $('.qtab').removeClass('active'); $(this).addClass('active');
+    const tab = $(this).data('tab');
+    $('.qrow').each(function(){
+      const status = $(this).find('.qstatus');
+      let show = true;
+      if(tab==='done') show = status.hasClass('ok');
+      if(tab==='failed') show = status.hasClass('err');
+      $(this).toggle(show);
+    });
+  });
+
+  /* ---------- drag rows between panes triggers real transfer ---------- */
+  $(document).on('dragstart', 'table.filelist tbody tr', function(e){
+    if(!$(this).data('name')) return;
+    e.originalEvent.dataTransfer.setData('text/plain', JSON.stringify({
+      name: $(this).data('name'), idx: $(this).data('idx'), from: $(this).closest('.pane').attr('id')
+    }));
+  });
+  $(document).on('mouseenter', 'table.filelist tbody tr', function(){ if($(this).data('name')) $(this).attr('draggable', true); });
+  $('.pane').on('dragover', function(e){ e.preventDefault(); });
+  $('#pane-remote').on('drop', function(e){
+    // also handles internal drag from local pane (OS file drops handled separately above)
+    try{
+      const data = JSON.parse(e.originalEvent.dataTransfer.getData('text/plain'));
+      if(data && data.from === 'pane-local'){
+        e.preventDefault();
+        uploadLocal(localFiles[data.idx]);
+      }
+    }catch(err){}
+  });
+  $('#pane-local').on('drop', function(e){
+    try{
+      const data = JSON.parse(e.originalEvent.dataTransfer.getData('text/plain'));
+      if(data && data.from === 'pane-remote'){
+        e.preventDefault();
+        downloadRemote(data.name);
+      }
+    }catch(err){}
+  });
+
+});
+</script>
+</body>
+</html>
