@@ -15,6 +15,12 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
+app.use(express.static(__dirname));
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "client.html"));
+});
+
 const app = express();
 app.use(cors());
 app.use(express.json());
