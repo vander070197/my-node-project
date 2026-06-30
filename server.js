@@ -159,5 +159,8 @@ function formatEntry(e) {
   };
 }
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`WebFTP backend listening on http://localhost:${PORT}`));
+const PORT = process.env.PORT || 8080;
+
+app.listen(PORT, () => {
+    console.log(`WebFTP backend listening on port ${PORT}`);
+});
